@@ -1,43 +1,44 @@
 import os
 # os.environ["KAGGLE_CONFIG_DIR"] = "/home/alexey/"
-import kaggle
+# import kaggle
 import pandas as pd
 import requests
+import yfinance as yf  
 
 # --- 1. DOWNLOAD DATA FROM KAGGLE ---
 
-def get_kaggle_data(dataset_slug, extract_dir='kaggle_data'):
-    """
-    Downloads a specific file from a Kaggle dataset, extracts it,
-    and loads it into a pandas DataFrame.
+# def get_kaggle_data(dataset_slug, extract_dir='kaggle_data'):
+#     """
+#     Downloads a specific file from a Kaggle dataset, extracts it,
+#     and loads it into a pandas DataFrame.
 
-    :param dataset_slug: The slug of the dataset (e.g., 'titanic')
-    :param extract_dir: Directory to extract files into
-    :return: pandas DataFrame or None
-    """
-    print(f"--- Loading data from Kaggle: {dataset_slug} ---")
-    try:
-        # Ensure extraction directory exists
-        os.makedirs(extract_dir, exist_ok=True)
+#     :param dataset_slug: The slug of the dataset (e.g., 'titanic')
+#     :param extract_dir: Directory to extract files into
+#     :return: pandas DataFrame or None
+#     """
+#     print(f"--- Loading data from Kaggle: {dataset_slug} ---")
+#     try:
+#         # Ensure extraction directory exists
+#         os.makedirs(extract_dir, exist_ok=True)
 
-        print(f"Downloading {dataset_slug}...")
-        kaggle.api.dataset_download_files(dataset_slug, path=extract_dir, unzip=True)
+#         print(f"Downloading {dataset_slug}...")
+#         kaggle.api.dataset_download_files(dataset_slug, path=extract_dir, unzip=True)
 
-        csv_file_path = [f for f in os.listdir(extract_dir) if os.path.isfile(os.path.join(extract_dir, f))][0]
-        csv_file_path = os.path.join(extract_dir, csv_file_path) # make it a full path
-        # Load the extracted CSV into a DataFrame
-        if os.path.exists(csv_file_path):
-            print(f"Loading {csv_file_path} into DataFrame...")
-            df = pd.read_csv(csv_file_path)
-            print("Kaggle data loaded successfully.")
-            return df
-        else:
-            print(f"Error: Could not find extracted file {csv_file_path}")
-            return None
+#         csv_file_path = [f for f in os.listdir(extract_dir) if os.path.isfile(os.path.join(extract_dir, f))][0]
+#         csv_file_path = os.path.join(extract_dir, csv_file_path) # make it a full path
+#         # Load the extracted CSV into a DataFrame
+#         if os.path.exists(csv_file_path):
+#             print(f"Loading {csv_file_path} into DataFrame...")
+#             df = pd.read_csv(csv_file_path)
+#             print("Kaggle data loaded successfully.")
+#             return df
+#         else:
+#             print(f"Error: Could not find extracted file {csv_file_path}")
+#             return None
 
-    except Exception as e:
-        print(f"Error loading data from Kaggle: {e}")
-        return None
+#     except Exception as e:
+#         print(f"Error loading data from Kaggle: {e}")
+#         return None
 
 
 # --- 2. DOWNLOAD FILE FROM WEB ---
@@ -105,3 +106,38 @@ def get_wikipedia_table_data(url, table_index=0):
         print(f"Error scraping Wikipedia table: {e}")
         return None
 
+# --- 4. DOWNLOAD MARKET DATA FROM YAHOO FINANCE (yfinance API) ---
+
+def get_market_data(start_date="2017-01-01", end_date="2020-12-31"):
+    """
+    Fetch daily S&P 500 (^GSPC) and VIX (^VIX) data from Yahoo Finance
+    between start_date and end_date.
+
+    Returns
+    -------
+    sp500 : pd.DataFrame
+        Historical data for S&P 500 index.
+    vix : pd.DataFrame
+        Historical data for VIX index.
+    """
+    print(f"--- Fetching market data from Yahoo Finance ({start_date} to {end_date}) ---")
+    sp500 = yf.download("^GSPC", start=start_date, end=end_date)
+    vix = yf.download("^VIX", start=start_date, end=end_date)
+
+    print(f"S&P 500 rows: {len(sp500)}, VIX rows: {len(vix)}")
+    return sp500, vix
+
+
+def get_and_save_market_data(
+    start_date="2017-01-01", end_date="2020-12-31",
+    data_dir="data"
+):
+    os.makedirs(data_dir, exist_ok=True)
+
+    sp500, vix = get_market_data(start_date, end_date)
+
+    sp500.to_csv(os.path.join(data_dir, "sp500_2017_2020.csv"))
+    vix.to_csv(os.path.join(data_dir, "vix_2017_2020.csv"))
+
+    print("Saved S&P 500 and VIX data to data/ folder.")
+    return sp500, vix
