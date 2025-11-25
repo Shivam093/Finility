@@ -5,3 +5,5 @@ kaggle
 kagglehub
 python-dotenv
 yfinance
+nltk
+statsmodels
