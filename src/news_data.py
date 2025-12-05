@@ -1,10 +1,10 @@
-import os
 import pandas as pd
-from datetime import datetime
+
+from src.config import CNBC_CSV, GUARDIAN_CSV, REUTERS_CSV, START_DATE, END_DATE
 
 
-def _parse_date_from_time(time_str: str):
-    """Extracts a date object from the 'Time' string."""
+def _parse_date_from_time(time_str):
+    """Extract a date from the 'Time' string."""
     if not isinstance(time_str, str):
         return None
     try:
@@ -15,33 +15,36 @@ def _parse_date_from_time(time_str: str):
         return None
 
 
-def load_and_combine_news(data_dir: str = "data") -> pd.DataFrame:
-    cnbc = pd.read_csv(os.path.join(data_dir, "cnbc_headlines.csv"))
-    guardian = pd.read_csv(os.path.join(data_dir, "guardian_headlines.csv"))
-    reuters = pd.read_csv(os.path.join(data_dir, "reuters_headlines.csv"))
+def load_and_combine_news() -> pd.DataFrame:
+    """
+    Load CNBC, Guardian, and Reuters CSVs, standardize, and return a combined
+    DataFrame with a 'date' column and 'text' column used for sentiment.
+    """
+    print("--- Loading raw news CSVs (CNBC, Guardian, Reuters) ---")
+    cnbc = pd.read_csv(CNBC_CSV)
+    guardian = pd.read_csv(GUARDIAN_CSV)
+    reuters = pd.read_csv(REUTERS_CSV)
 
-    # Add source column
     cnbc["source"] = "CNBC"
     guardian["source"] = "Guardian"
     reuters["source"] = "Reuters"
 
     df = pd.concat([cnbc, guardian, reuters], ignore_index=True)
+
+    # Require headlines and time
     df = df.dropna(subset=["Headlines", "Time"])
 
-    # Parse date from Time
+    # Parse date from "Time"
     df["date"] = df["Time"].apply(_parse_date_from_time)
-
-    # Drop rows without valid date
     df = df.dropna(subset=["date"])
 
-    # Optional: restrict to 2017–2020
+    # Restrict to 2017–2020
     df = df[
-        (df["date"] >= pd.to_datetime("2017-01-01")) &
-        (df["date"] <= pd.to_datetime("2020-12-31"))
+        (df["date"] >= pd.to_datetime(START_DATE)) &
+        (df["date"] <= pd.to_datetime(END_DATE))
     ]
 
-    # Build a text field similar to what you trained on (Description)
-    # If Description is missing, fall back to Headlines
+    # Build 'text' field using Description + Headlines if available
     if "Description" in df.columns:
         df["text"] = (
             df["Description"].fillna("") + " " + df["Headlines"].fillna("")
@@ -51,4 +54,5 @@ def load_and_combine_news(data_dir: str = "data") -> pd.DataFrame:
 
     df = df[df["text"].str.len() > 0]
 
+    print(f"Combined news rows: {len(df)}")
     return df

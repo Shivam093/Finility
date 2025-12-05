@@ -1,46 +1,29 @@
+import os
+import joblib
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, classification_report
-from nltk.sentiment import SentimentIntensityAnalyzer
-import joblib
-import nltk
-nltk.download('vader_lexicon')
 
-def load_raw_news():
-    """
-    Loads the three Kaggle news datasets from the local data/ folder.
-    """
+from src.news_data import load_and_combine_news
+from src.config import RESULTS_DIR, SENTIMENT_MODEL_PATH
+
+
+def _ensure_nltk_vader():
     try:
-        cnbc = pd.read_csv("data/cnbc_headlines.csv")
-        guardian = pd.read_csv("data/guardian_headlines.csv")
-        reuters = pd.read_csv("data/reuters_headlines.csv")
-
-        df = pd.concat([cnbc, guardian, reuters], ignore_index=True)
-        df = df.dropna()
-
-        # Notebook uses Headlines + Description
-        if "Headlines" in df.columns and "Description" in df.columns:
-            df = df[["Headlines", "Description"]]
-        else:
-            raise ValueError("Expected columns 'Headlines' and 'Description' missing.")
-
-        return df
-    
-    except Exception as e:
-        print(f"Error loading news datasets: {e}")
-        return None
+        nltk.data.find("sentiment/vader_lexicon.zip")
+    except LookupError:
+        nltk.download("vader_lexicon")
 
 
-def classify_with_vader(text):
-    """
-    Converts text → positive/neutral/negative using VADER 
-    """
+def _vader_label(text: str) -> str:
     sia = SentimentIntensityAnalyzer()
     score = sia.polarity_scores(str(text))["compound"]
-
     if score >= 0.05:
         return "positive"
     elif score <= -0.05:
@@ -51,16 +34,17 @@ def classify_with_vader(text):
 
 def train_sentiment_model():
     """
-    Uses VADER-labelled descriptions to train a Linear SVC sentiment classifier
+    Train a Linear SVC sentiment classifier using VADER-generated labels
+    on combined news text, and save it to SENTIMENT_MODEL_PATH.
     """
-    df = load_raw_news()
-    if df is None:
-        raise RuntimeError("Could not load news data.")
+    print("--- Training sentiment model (Linear SVC) ---")
+    _ensure_nltk_vader()
 
-    print("Generating sentiment labels with VADER...")
-    df["label"] = df["Description"].apply(classify_with_vader)
+    df = load_and_combine_news()
+    print("Generating VADER labels...")
+    df["label"] = df["text"].apply(_vader_label)
 
-    X = df["Description"]
+    X = df["text"]
     y = df["label"]
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -72,18 +56,18 @@ def train_sentiment_model():
         ("clf", LinearSVC())
     ])
 
-    print("Training Linear SVC sentiment model...")
     pipeline.fit(X_train, y_train)
 
     y_pred = pipeline.predict(X_test)
     print("Accuracy:", accuracy_score(y_test, y_pred))
     print(classification_report(y_test, y_pred))
 
-    # Save model for future use
-    joblib.dump(pipeline, "results/sentiment_pipeline.pkl")
-    print("Model saved to results/sentiment_pipeline.pkl")
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    joblib.dump(pipeline, SENTIMENT_MODEL_PATH)
+    print(f"Model saved to {SENTIMENT_MODEL_PATH}")
 
     return pipeline
+
 
 if __name__ == "__main__":
     train_sentiment_model()

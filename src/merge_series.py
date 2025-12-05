@@ -1,43 +1,99 @@
 import pandas as pd
 
-# 1) Daily sentiment
-daily_sent = pd.read_csv("data/daily_sentiment_2017_2020.csv")
-daily_sent["date"] = pd.to_datetime(daily_sent["date"])
-daily_sent = daily_sent.set_index("date")
-
-# 2) S&P 500
-sp500 = pd.read_csv("data/sp500_2017_2020.csv")
-sp500 = sp500.rename(columns={"Price": "Date"})
-sp500 = sp500.iloc[2:].copy()        # remove "Ticker" and "Date,,,,"
-sp500["Date"] = pd.to_datetime(sp500["Date"])
-sp500 = sp500.set_index("Date")
-sp500["return"] = sp500["Close"].astype(float).pct_change()
-
-# 3) VIX
-vix = pd.read_csv("data/vix_2017_2020.csv")
-vix = vix.rename(columns={"Price": "Date"})
-vix = vix.iloc[2:].copy()
-vix["Date"] = pd.to_datetime(vix["Date"])
-vix = vix.set_index("Date")
-vix = vix.rename(columns={"Close": "vix"})
-vix["vix"] = vix["vix"].astype(float)
-
-# 4) Merge sentiment + returns + VIX
-merged = sp500[["return"]].merge(
-    daily_sent, left_index=True, right_index=True, how="left"
+from src.config import (
+    SP500_CSV,
+    VIX_CSV,
+    DAILY_SENTIMENT_CSV,
+    MERGED_DATA_CSV,
 )
 
-merged = merged.merge(
-    vix[["vix"]], left_index=True, right_index=True
-)
 
-# Keep only rows where daily_sentiment is available
-filtered = merged.loc["2017-12-18":"2020-07-17"].dropna(subset=["daily_sentiment"])
+def _load_sp500() -> pd.DataFrame:
+    """
+    Load S&P 500 CSV and return a DataFrame indexed by Date with a 'return' column.
+    Robust to minor header/format issues.
+    """
+    print(f"--- Loading S&P 500 data from {SP500_CSV} ---")
+    df = pd.read_csv(SP500_CSV)
 
-print(filtered.head())
-print(filtered.tail())
-print(filtered.isna().sum())
+    # Prefer a 'Date' column if present
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+        df = df.set_index("Date")
+    else:
+        # Fallback: treat the first column as Date
+        first_col = df.columns[0]
+        print(f"No 'Date' column found, treating '{first_col}' as Date.")
+        df[first_col] = pd.to_datetime(df[first_col], errors="coerce")
+        df = df.dropna(subset=[first_col])
+        df = df.set_index(first_col)
+        df.index.name = "Date"
 
-# Save final dataset
-filtered.to_csv("data/merged_sentiment_market.csv")
-print("Saved filtered dataset → data/merged_sentiment_market.csv")
+    # Make sure Close is numeric, drop any junk rows
+    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+    df = df.dropna(subset=["Close"])
+
+    # Compute daily returns
+    df["return"] = df["Close"].pct_change()
+    return df
+
+
+def _load_vix() -> pd.DataFrame:
+    """
+    Load VIX CSV and return a DataFrame indexed by Date with a 'vix' column.
+    Robust to minor header/format issues.
+    """
+    print(f"--- Loading VIX data from {VIX_CSV} ---")
+    df = pd.read_csv(VIX_CSV)
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+        df = df.set_index("Date")
+    else:
+        first_col = df.columns[0]
+        print(f"No 'Date' column found, treating '{first_col}' as Date.")
+        df[first_col] = pd.to_datetime(df[first_col], errors="coerce")
+        df = df.dropna(subset=[first_col])
+        df = df.set_index(first_col)
+        df.index.name = "Date"
+
+    # Close becomes 'vix'
+    df["vix"] = pd.to_numeric(df["Close"], errors="coerce")
+    df = df.dropna(subset=["vix"])
+    return df
+
+
+def merge_datasets():
+    """
+    Merge S&P 500 returns, daily sentiment, and VIX into a single DataFrame
+    and save it to MERGED_DATA_CSV.
+    """
+    print("--- Loading daily sentiment ---")
+    daily_sent = pd.read_csv(DAILY_SENTIMENT_CSV)
+    daily_sent["date"] = pd.to_datetime(daily_sent["date"], format="%Y-%m-%d")
+    daily_sent = daily_sent.set_index("date")
+
+    sp500 = _load_sp500()
+    vix = _load_vix()
+
+    print("--- Merging S&P returns with sentiment ---")
+    merged = sp500[["return"]].merge(
+        daily_sent, left_index=True, right_index=True, how="left"
+    )
+
+    print("--- Merging with VIX ---")
+    merged = merged.merge(
+        vix[["vix"]], left_index=True, right_index=True, how="left"
+    )
+
+    print(f"Saving merged dataset → {MERGED_DATA_CSV}")
+    merged.to_csv(MERGED_DATA_CSV)
+
+    return merged
+
+
+if __name__ == "__main__":
+    df = merge_datasets()
+    print(df.head())

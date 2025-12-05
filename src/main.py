@@ -1,35 +1,34 @@
-import os
-from config import DATA_DIR, RESULTS_DIR, TITANIC_DATASET_SLUG, WIKI_LARGEST_COMPANIES, IRIS_URL
-from load import get_kaggle_data, get_web_csv_data
-from analyze import plot_statistics
-from process import process_wiki_data
+"""
+main.py – pipeline runner for Finility project.
+
+This script:
+1) Downloads market data (S&P 500 + VIX) via yfinance
+2) Trains the sentiment model
+3) Applies the sentiment model to headlines to create daily sentiment
+4) Merges sentiment with S&P 500 returns and VIX into a final dataset
+"""
+
+from src.load import get_market_data
+from src.sentiment_model import train_sentiment_model
+from src.apply_sentiment import label_news_with_sentiment
+from src.merge_series import merge_datasets
+
+
+def main():
+    # 1) Download market data and save to CSVs
+    get_market_data()
+
+    # 2) Train sentiment classification model and save to results/sentiment_pipeline.pkl
+    train_sentiment_model()
+
+    # 3) Apply model to all headlines and create daily_sentiment_2017_2020.csv
+    label_news_with_sentiment()
+
+    # 4) Merge S&P 500 returns, sentiment, and VIX into merged_sentiment_market.csv
+    merge_datasets()
+
+    print("Pipeline completed successfully.")
+
 
 if __name__ == "__main__":
-    # Create a data directory
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-    # --- Kaggle Data ---
-    # We'll use the classic Titanic dataset
-    kaggle_df = get_kaggle_data(dataset_slug=TITANIC_DATASET_SLUG, extract_dir=DATA_DIR)
-    if kaggle_df is not None:
-        print(f"\nKaggle (Titanic) Data Head:\n{kaggle_df.head()}")
-        plot_statistics(kaggle_df, 'Titanic', result_dir=RESULTS_DIR)
-    print("\n" + "=" * 50 + "\n")
-
-    # --- Web CSV Data ---
-    # We'll use the Iris dataset from a public repo
-    web_df = get_web_csv_data(IRIS_URL)
-    if web_df is not None:
-        print(f"\nWeb (Iris) Data Head:\n{web_df.head()}")
-        plot_statistics(web_df, 'Iris', result_dir=RESULTS_DIR)
-    print("\n" + "=" * 50 + "\n")
-
-    # --- Wikipedia Scraped Data ---
-    # We'll scrape a table of the largest companies
-    # process data firsts
-    plot_df = process_wiki_data(WIKI_LARGEST_COMPANIES)
-    # plot results
-    plot_statistics(plot_df.dropna(), 'Wikipedia_Companies', result_dir=RESULTS_DIR)
-    print("\n" + "=" * 50 + "\n")
-
-    print("\n--- Data collection and plotting complete. Check the 'results' directory. ---")
+    main()
